@@ -1,0 +1,282 @@
+task 1:
+
+SELECT
+    YEAR(o.OrderDate) AS Year, 
+    MONTH(o.OrderDate) AS Month,
+    c.Region AS State, 
+    SUM(od.UnitPrice * od.Quantity) AS TotalSales  -- Fixed the syntax here
+FROM 
+    Orders o
+JOIN 
+    OrderDetails od ON o.OrderID = od.OrderID
+JOIN 
+    Customers c ON o.CustomerID = c.CustomerID
+WHERE 
+    YEAR(o.OrderDate) IN (YEAR(GETDATE()), YEAR(GETDATE()) - 1) 
+GROUP BY 
+    YEAR(o.OrderDate), MONTH(o.OrderDate), c.Region
+ORDER BY 
+    c.Region, Year, Month;
+
+
+task2:
+
+WITH MonthlySales AS (
+    SELECT
+        YEAR(o.OrderDate) AS Year,
+        MONTH(o.OrderDate) AS Month,
+        od.ProductID,
+        SUM(od.UnitPrice * od.Quantity) AS TotalSales
+    FROM 
+        Orders o
+    JOIN 
+        OrderDetails od ON o.OrderID = od.OrderID
+    JOIN 
+        Products p ON od.ProductID = p.ProductID
+    GROUP BY 
+        YEAR(o.OrderDate), MONTH(o.OrderDate), od.ProductID
+)
+
+SELECT
+    m1.Year,
+    m1.Month,
+    m1.ProductID,
+    m1.TotalSales AS CurrentMonthSales,
+    (m1.TotalSales - COALESCE(m2.TotalSales, 0)) AS SalesGrowth
+FROM 
+    MonthlySales m1
+LEFT JOIN 
+    MonthlySales m2 ON m1.ProductID = m2.ProductID
+    AND m1.Year = m2.Year
+    AND m1.Month = m2.Month + 1
+ORDER BY 
+    m1.ProductID, m1.Year, m1.Month;
+
+
+task 3:
+
+SELECT TOP 3
+    e.EmployeeID,
+    e.FirstName + ' ' + e.LastName AS EmployeeName,
+    SUM(od.UnitPrice * od.Quantity) AS TotalSales
+FROM 
+    Employees e
+JOIN 
+    Orders o ON e.EmployeeID = o.EmployeeID
+JOIN 
+    OrderDetails od ON o.OrderID = od.OrderID
+GROUP BY 
+    e.EmployeeID, e.FirstName, e.LastName
+ORDER BY 
+    TotalSales DESC;
+
+task 4:
+WITH ProductSales AS (
+    SELECT 
+        YEAR(o.OrderDate) AS SaleYear,
+        p.ProductID, 
+        CAST(p.ProductName AS NVARCHAR(255)) AS ProductName,  -- Convert ProductName
+        e.EmployeeID, 
+        CAST(e.FirstName AS NVARCHAR(255)) AS FirstName,  -- Convert FirstName
+        CAST(e.LastName AS NVARCHAR(255)) AS LastName,    -- Convert LastName
+        SUM(od.UnitPrice * od.Quantity) AS TotalSales
+    FROM Orders o
+    JOIN [OrderDetails] od ON o.OrderID = od.OrderID
+    JOIN Products p ON od.ProductID = p.ProductID
+    JOIN Employees e ON o.EmployeeID = e.EmployeeID
+    GROUP BY 
+        YEAR(o.OrderDate), 
+        p.ProductID, 
+        CAST(p.ProductName AS NVARCHAR(255)),  -- Ensure grouping for ProductName
+        e.EmployeeID, 
+        CAST(e.FirstName AS NVARCHAR(255)),    -- Ensure grouping for FirstName
+        CAST(e.LastName AS NVARCHAR(255) )     -- Ensure grouping for LastName
+)
+
+SELECT 
+    ps.SaleYear,
+    ps.ProductID,
+    ps.ProductName,
+    ps.EmployeeID,
+    ps.FirstName,
+    ps.LastName,
+    ps.TotalSales
+FROM ProductSales ps
+WHERE ps.TotalSales = (
+    SELECT MAX(ps2.TotalSales)
+    FROM ProductSales ps2
+    WHERE ps2.ProductID = ps.ProductID AND ps2.SaleYear = ps.SaleYear
+)
+ORDER BY ps.SaleYear, ps.ProductID;
+
+
+task 5:
+WITH SalesByCountry AS (
+    SELECT 
+        C.Country, 
+        SUM(OD.Quantity * OD.UnitPrice) AS TotalSales
+    FROM 
+        Orders O
+    JOIN 
+        OrderDetails OD ON O.OrderID = OD.OrderID
+    JOIN 
+        Customers C ON O.CustomerID = C.CustomerID
+    GROUP BY 
+        C.Country
+), TotalSales AS (
+    SELECT 
+        SUM(TotalSales) AS TotalAmount 
+    FROM 
+        SalesByCountry
+)
+
+SELECT 
+    Country 
+FROM 
+    SalesByCountry
+WHERE 
+    (SELECT SUM(TotalSales) 
+     FROM SalesByCountry 
+     WHERE Country <= SalesByCountry.Country) <=
+    (SELECT TotalAmount * 0.50 
+     FROM TotalSales);
+
+
+task 6:
+WITH SalesData AS (
+    SELECT
+        c.CategoryID,
+        YEAR(o.OrderDate) AS Year,
+        MONTH(o.OrderDate) AS Month,
+        SUM(od.UnitPrice * od.Quantity) AS MonthlySales
+    FROM 
+        Categories c
+    JOIN 
+        Products p ON c.CategoryID = p.CategoryID
+    JOIN 
+        OrderDetails od ON p.ProductID = od.ProductID
+    JOIN 
+        Orders o ON od.OrderID = o.OrderID
+    GROUP BY 
+        c.CategoryID, 
+        YEAR(o.OrderDate), 
+        MONTH(o.OrderDate)
+)
+SELECT
+    CategoryID, 
+    Year, 
+    Month, 
+    MonthlySales,
+    AVG(MonthlySales) OVER (PARTITION BY CategoryID ORDER BY Year, Month ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS MovingAvg
+FROM 
+    SalesData;
+
+
+task 7:
+SELECT
+    p.ProductID,
+    YEAR(o.OrderDate) AS Year,
+    MONTH(o.OrderDate) AS Month,
+    SUM(od.UnitPrice * od.Quantity) AS TotalSales,
+    SUM(od.Discount * od.UnitPrice * od.Quantity) AS TotalDiscount
+FROM 
+    Products p
+JOIN 
+    OrderDetails od ON p.ProductID = od.ProductID
+JOIN 
+    Orders o ON od.OrderID = o.OrderID
+GROUP BY 
+    p.ProductID, 
+    YEAR(o.OrderDate), 
+    MONTH(o.OrderDate);
+
+
+
+task 8:
+SELECT
+    c.CategoryID,
+    YEAR(o.OrderDate) AS Year,
+    MONTH(o.OrderDate) AS Month,
+    SUM(od.UnitPrice * od.Quantity) AS MonthlySales,
+    SUM(SUM(od.UnitPrice * od.Quantity)) OVER (PARTITION BY c.CategoryID, YEAR(o.OrderDate) ORDER BY MONTH(o.OrderDate)) AS YTD_Sales
+FROM 
+    Categories c
+JOIN 
+    Products p ON c.CategoryID = p.CategoryID
+JOIN 
+    OrderDetails od ON p.ProductID = od.ProductID
+JOIN 
+    Orders o ON od.OrderID = o.OrderID
+GROUP BY 
+    c.CategoryID, 
+    YEAR(o.OrderDate), 
+    MONTH(o.OrderDate);
+
+
+task 9:
+WITH SalesData AS (
+    SELECT
+        c.CategoryID,
+        YEAR(o.OrderDate) AS Year,
+        MONTH(o.OrderDate) AS Month,
+        SUM(od.UnitPrice * od.Quantity) AS MonthlySales
+    FROM 
+        Categories c
+    JOIN 
+        Products p ON c.CategoryID = p.CategoryID
+    JOIN 
+        OrderDetails od ON p.ProductID = od.ProductID
+    JOIN 
+        Orders o ON od.OrderID = o.OrderID
+    GROUP BY 
+        c.CategoryID, YEAR(o.OrderDate), MONTH(o.OrderDate)
+)
+
+SELECT
+    CategoryID, 
+    Year, 
+    Month, 
+    MonthlySales,
+    AVG(MonthlySales) OVER (PARTITION BY CategoryID ORDER BY Year, Month ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS MovingAvg
+FROM 
+    SalesData;
+
+
+task 10:
+
+WITH EmployeeSales AS (
+    SELECT
+        e.EmployeeID,
+        SUM(od.UnitPrice * od.Quantity) AS SalesAmount
+    FROM 
+        Orders o
+    JOIN 
+        OrderDetails od ON o.OrderID = od.OrderID
+    JOIN 
+        Employees e ON o.EmployeeID = e.EmployeeID
+    WHERE 
+        YEAR(o.OrderDate) = 1997
+    GROUP BY 
+        e.EmployeeID
+)
+SELECT
+    e.EmployeeID,
+    e.FirstName + ' ' + e.LastName AS EmployeeName,
+    SUM(od.UnitPrice * od.Quantity) AS PersonalSales,
+    (SELECT SUM(SalesAmount) 
+     FROM EmployeeSales es 
+     WHERE es.EmployeeID = e.EmployeeID 
+     OR es.EmployeeID IN (SELECT EmployeeID FROM Employees WHERE ReportsTo = e.EmployeeID)
+    ) AS TotalSalesWithSubordinates
+FROM 
+    Employees e
+JOIN 
+    Orders o ON e.EmployeeID = o.EmployeeID
+JOIN 
+    OrderDetails od ON o.OrderID = od.OrderID
+WHERE 
+    YEAR(o.OrderDate) = 1997
+GROUP BY 
+    e.EmployeeID, 
+    e.FirstName, 
+    e.LastName;
