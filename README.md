@@ -1,1 +1,1 @@
-# Quries(DW-lab)
+#  sql Quries(DW-lab)
